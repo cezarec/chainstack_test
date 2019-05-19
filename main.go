@@ -7,7 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -17,6 +20,8 @@ import (
 //const crpcadd = "https://nd-986-703-606.p2pify.com"
 const crpcadd = "http://127.0.0.1"
 const crpcport = "8545"
+const cpollduration = 100
+const clistenport = "9090" // port of exporter daemon
 
 type gethinfo struct {
 	//rpcserver       string
@@ -35,6 +40,11 @@ type rpcProgress struct {
 	KnownStates   hexutil.Uint64
 }
 
+var (
+	rpcc    *ethrpc.Client
+	gethrpc *gethinfo
+)
+
 ///   main function start
 func main() {
 
@@ -44,7 +54,7 @@ func main() {
 
 	ctx := context.TODO()
 
-	rpcc, err := ethrpc.DialContext(ctx, gethserver)
+	rpcc, err = ethrpc.DialContext(ctx, gethserver)
 
 	if err != nil {
 		fmt.Printf("straight connection issue\n")
@@ -54,12 +64,23 @@ func main() {
 		fmt.Printf("!rpc server connected!\n")
 	}
 
-	gethprc, err := ownSyncProgress(ctx, rpcc)
-	if err != nil {
-		fmt.Print("\n Node is not on Sync mode")
-	}
+	go func(ctx context.Context) {
+		for {
+			gethrpc, err = ownSyncProgress(ctx, rpcc)
+			if err != nil {
+				fmt.Print("\n Node is not on Sync mode")
 
-	fmt.Printf("\n%v\n", gethprc)
+			}
+			fmt.Printf("info %v \n", gethrpc)
+			time.Sleep(time.Duration(cpollduration) * time.Millisecond)
+		}
+	}(ctx)
+
+	http.HandleFunc("/metrics", Tometricshttp)
+	err = http.ListenAndServe(":"+clistenport, nil)
+	if err != nil {
+		panic(err)
+	}
 
 }
 
@@ -85,12 +106,8 @@ func ownSyncProgress(ctx context.Context, ec *ethrpc.Client) (*gethinfo, error) 
 		return nil, err
 	}
 
-	msg := fmt.Sprintf("%s", rawdata)
-	num, _ := strconv.Unquote(msg)
+	num, _ := strconv.Unquote(fmt.Sprintf("%s", rawdata))
 	numc, _ := hexutil.DecodeUint64(num)
-
-	fmt.Printf("%s    %s", numc, num)
-
 	return &gethinfo{
 
 		peersnum:        uint64(numc),
@@ -99,5 +116,23 @@ func ownSyncProgress(ctx context.Context, ec *ethrpc.Client) (*gethinfo, error) 
 		pulledStatesnum: uint64(progress.PulledStates),
 		knownStatesnum:  uint64(progress.KnownStates),
 	}, nil
+
+}
+
+func Tometricshttp(hwriter http.ResponseWriter, hreq *http.Request) {
+	strbuf := []string{}
+
+	strbuf = append(strbuf, fmt.Sprintf("peers_number %v", gethrpc.peersnum))
+	strbuf = append(strbuf, fmt.Sprintf("current_block %v", gethrpc.curBlocknum))
+	strbuf = append(strbuf, fmt.Sprintf("highest_block %v", gethrpc.highestBlocknum))
+	strbuf = append(strbuf, fmt.Sprintf("known_states %v", gethrpc.knownStatesnum))
+	strbuf = append(strbuf, fmt.Sprintf("pulled_states %v", gethrpc.pulledStatesnum))
+
+	hwriter.Write([]byte(strings.Join(strbuf, "\n")))
+}
+
+func nosyncwriter(hwriter http.ResponseWriter, hreq *http.Request) {
+
+	hwriter.Write([]byte(fmt.Sprint("Node is not in syncmode")))
 
 }
