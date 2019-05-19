@@ -5,9 +5,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethrpc "github.com/ethereum/go-ethereum/rpc"
 	// gethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -24,49 +27,77 @@ type gethinfo struct {
 	pulledStatesnum uint64
 }
 
+type rpcProgress struct {
+	StartingBlock hexutil.Uint64
+	CurrentBlock  hexutil.Uint64
+	HighestBlock  hexutil.Uint64
+	PulledStates  hexutil.Uint64
+	KnownStates   hexutil.Uint64
+}
+
 ///   main function start
 func main() {
 
 	var err error
-	var eth *ethclient.Client
-	geth := gethinfo{}
+
 	gethserver := crpcadd + ":" + crpcport
 
 	ctx := context.TODO()
-	//defer eth.Close()
 
-	eth, _ = ethclient.Dial(gethserver)
+	rpcc, err := ethrpc.DialContext(ctx, gethserver)
 
 	if err != nil {
+		fmt.Printf("straight connection issue\n")
+		fmt.Printf("%v", err)
 		panic(err)
 	} else {
-		fmt.Printf("connected to rpc point\n")
+		fmt.Printf("!rpc server connected!\n")
 	}
 
-	//curBlock, err := eth.BlockByNumber(ctx, nil)
-
-	//eth.curBlocknum = curBlock.Header.number
-
-	curSP, err := eth.SyncProgress(ctx)
+	gethprc, err := ownSyncProgress(ctx, rpcc)
 	if err != nil {
-		fmt.Print("\n syncProgress got\n")
-	} else {
-		fmt.Printf("\nsyncProgrerssIssue")
+		fmt.Print("\n Node is not on Sync mode")
 	}
 
-	if curSP == nil {
-		fmt.Printf(" no sync currently running")
-		return
+	fmt.Printf("\n%v\n", gethprc)
+
+}
+
+func ownSyncProgress(ctx context.Context, ec *ethrpc.Client) (*gethinfo, error) { // from ethclient/rpc
+
+	var rawdata json.RawMessage
+
+	if err := ec.CallContext(ctx, &rawdata, "eth_syncing"); err != nil {
+		return nil, err
+	}
+	// Handle the possible response types
+	var syncing bool
+	if err := json.Unmarshal(rawdata, &syncing); err == nil {
+		return nil, nil
+	}
+	var progress *rpcProgress
+	if err := json.Unmarshal(rawdata, &progress); err != nil {
+		return nil, err
 	}
 
-	geth.highestBlocknum = curSP.HighestBlock
-	geth.curBlocknum = curSP.CurrentBlock
-	geth.knownStatesnum = curSP.KnownStates
-	geth.pulledStatesnum = curSP.PulledStates
+	if err := ec.CallContext(ctx, &rawdata, "net_peerCount"); err != nil {
 
-	fmt.Printf("\n%v\n", curSP)
-	fmt.Printf("%v\n", curSP.CurrentBlock)
+		return nil, err
+	}
 
-	fmt.Printf("\n found %v", geth)
+	msg := fmt.Sprintf("%s", rawdata)
+	num, _ := strconv.Unquote(msg)
+	numc, _ := hexutil.DecodeUint64(num)
+
+	fmt.Printf("%s    %s", numc, num)
+
+	return &gethinfo{
+
+		peersnum:        uint64(numc),
+		curBlocknum:     uint64(progress.CurrentBlock),
+		highestBlocknum: uint64(progress.HighestBlock),
+		pulledStatesnum: uint64(progress.PulledStates),
+		knownStatesnum:  uint64(progress.KnownStates),
+	}, nil
 
 }
