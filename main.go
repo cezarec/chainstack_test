@@ -21,7 +21,7 @@ import (
 const crpcadd = "http://127.0.0.1"
 const crpcport = "8545"
 const cpollduration = 100
-const clistenport = "9090" // port of exporter daemon
+const clistenport = "9080" // port of exporter daemon
 
 type gethinfo struct {
 	//rpcserver       string
@@ -57,8 +57,7 @@ func main() {
 	rpcc, err = ethrpc.DialContext(ctx, gethserver)
 
 	if err != nil {
-		fmt.Printf("straight connection issue\n")
-		fmt.Printf("%v", err)
+		fmt.Printf("rpc connection issue\n")
 		panic(err)
 	} else {
 		fmt.Printf("!rpc server connected!\n")
@@ -92,10 +91,7 @@ func ownSyncProgress(ctx context.Context, ec *ethrpc.Client) (*gethinfo, error) 
 		return nil, err
 	}
 	// Handle the possible response types
-	var syncing bool
-	if err := json.Unmarshal(rawdata, &syncing); err == nil {
-		return nil, nil
-	}
+
 	var progress *rpcProgress
 	if err := json.Unmarshal(rawdata, &progress); err != nil {
 		return nil, err
@@ -120,6 +116,7 @@ func ownSyncProgress(ctx context.Context, ec *ethrpc.Client) (*gethinfo, error) 
 }
 
 func Tometricshttp(hwriter http.ResponseWriter, hreq *http.Request) {
+
 	strbuf := []string{}
 
 	strbuf = append(strbuf, fmt.Sprintf("peers_number %v", gethrpc.peersnum))
@@ -129,10 +126,4 @@ func Tometricshttp(hwriter http.ResponseWriter, hreq *http.Request) {
 	strbuf = append(strbuf, fmt.Sprintf("pulled_states %v", gethrpc.pulledStatesnum))
 
 	hwriter.Write([]byte(strings.Join(strbuf, "\n")))
-}
-
-func nosyncwriter(hwriter http.ResponseWriter, hreq *http.Request) {
-
-	hwriter.Write([]byte(fmt.Sprint("Node is not in syncmode")))
-
 }
