@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,11 +21,10 @@ import (
 //const crpcadd = "https://nd-986-703-606.p2pify.com"
 const crpcadd = "http://127.0.0.1"
 const crpcport = "8545"
-const cpollduration = 100
+const cpollduration = 15
 const clistenport = "9080" // port of exporter daemon
 
 type gethinfo struct {
-	//rpcserver       string
 	peersnum        uint64 // number of peers
 	curBlocknum     uint64 //number if currentBlock
 	highestBlocknum uint64
@@ -67,10 +67,10 @@ func main() {
 		for {
 			gethrpc, err = ownSyncProgress(ctx, rpcc)
 			if err != nil {
-				fmt.Print("\n Node is not on Sync mode")
+				log.Print("Node is not in sync mode")
 
 			}
-			fmt.Printf("info %v \n", gethrpc)
+
 			time.Sleep(time.Duration(cpollduration) * time.Millisecond)
 		}
 	}(ctx)
