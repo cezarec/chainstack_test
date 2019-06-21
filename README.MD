@@ -32,4 +32,4 @@ Tested at:
 * Geth amd64-1.8.27 
 * Golang 11.9
 * Prometheus 2.9.2
-* Grafanf 6.20.0
+* Grafana 6.20.0
